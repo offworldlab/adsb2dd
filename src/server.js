@@ -8,7 +8,7 @@ import {isValidNumber} from './node/validate.js';
 
 const app = express();
 app.use(cors());
-const port = 80;
+const port = 49155;
 
 // constants
 var dict = {};
@@ -22,8 +22,6 @@ const nDopplerSmooth = 10;
 app.use(express.static('public'));
 
 app.get('/api/dd', async (req, res) => {
-
-  console.log(req.originalUrl);
 
   if (req.originalUrl in dict) {
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
@@ -102,6 +100,9 @@ const process_adsb2dd = async () => {
     // core processing
     adsb2dd(key, json);
 
+    // Update the timestamp to prevent reprocessing the same data
+    dict[key]['timestamp'] = json.now;
+
     // remove key after inactivity
     if (Date.now()/1000-dict[key]['out']['timestamp'] > tDelete) {
       delete(dict[key]);
@@ -132,81 +133,83 @@ function adsb2dd(key, json) {
 
   // loop over aircraft from JSON
   for (const aircraft of json.aircraft) {
+    const isValidAircraft = isValidNumber(aircraft['lat']) && 
+                           isValidNumber(aircraft['lon']) && 
+                           isValidNumber(aircraft['alt_geom']) && 
+                           (aircraft['flight'] != undefined);
 
-    // only consider aircraft with lat/lon/alt/flight
-    if (isValidNumber(aircraft['lat']) && isValidNumber(aircraft['lon']) && 
-      isValidNumber(aircraft['alt_geom'] && (aircraft['flight'] != undefined))) {
+    if (!isValidAircraft) {
+      continue;
+    }
 
-      // add new entry
-      const hexCode = aircraft.hex;
-      if (!(hexCode in dict[key]['out'])) {
-        dict[key]['out'][hexCode] = {};
-        dict[key]['proc'][hexCode] = {};
-        dict[key]['proc'][hexCode]['delays'] = [];
-        dict[key]['proc'][hexCode]['timestamps'] = [];
+    // add new entry
+    const hexCode = aircraft.hex;
+    if (!(hexCode in dict[key]['out'])) {
+      dict[key]['out'][hexCode] = {};
+      dict[key]['proc'][hexCode] = {};
+      dict[key]['proc'][hexCode]['delays'] = [];
+      dict[key]['proc'][hexCode]['timestamps'] = [];
+    }
+
+    // skip if no change to lat/lon/alt
+    if (dict[key]['out'][hexCode]['lat'] === aircraft['lat'] &&
+      dict[key]['out'][hexCode]['lon'] === aircraft['lon'] &&
+      dict[key]['out'][hexCode]['alt'] === aircraft['alt_geom']) {
+      continue;
+    }
+
+    dict[key]['out'][hexCode]['timestamp'] = json.now + aircraft.seen_pos;
+    dict[key]['out'][hexCode]['flight'] = (aircraft.flight);
+    dict[key]['proc'][hexCode]['lat'] = aircraft['lat'];
+    dict[key]['proc'][hexCode]['lon'] = aircraft['lon'];
+    dict[key]['proc'][hexCode]['alt'] = aircraft['alt_geom'];
+
+    // convert target to ECEF
+    const tar = lla2ecef(aircraft['lat'], aircraft['lon'], ft2m(aircraft['alt_geom']));
+
+    // bistatic delay (km)
+    const dRxTar = norm([dict[key]['ecefRx'].x-tar.x,
+      dict[key]['ecefRx'].y-tar.y,
+      dict[key]['ecefRx'].z-tar.z]);
+    const dTxTar = norm([dict[key]['ecefTx'].x-tar.x,
+      dict[key]['ecefTx'].y-tar.y,
+      dict[key]['ecefTx'].z-tar.z]);
+    const delay = dRxTar + dTxTar - dict[key]['dRxTx'];
+
+    // store bistatic delay/timestamps for Doppler
+    dict[key]['proc'][hexCode]['delays'].push(delay);
+    dict[key]['proc'][hexCode]['timestamps'].push(json.now + aircraft.seen_pos);
+
+    // bistatic Doppler (Hz)
+    if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
+
+      // smoothed derivative using median method
+      const doppler_ms_arr = smoothedDerivativeUsingMedian(
+        dict[key]['proc'][hexCode]['delays'], 
+        dict[key]['proc'][hexCode]['timestamps'], nDopplerSmooth);
+      const doppler_ms = doppler_ms_arr.at(-1);
+
+      // standard derivative (noisy)
+      /*
+      const delta_t = dict[key]['proc'][hexCode]['timestamps'].at(-1)
+        - dict[key]['proc'][hexCode]['timestamps'].at(-2);
+      const diff = dict[key]['proc'][hexCode]['delays'].at(-1)
+        - dict[key]['proc'][hexCode]['delays'].at(-2);
+      const doppler_ms = diff / delta_t;
+      */
+
+      // convert Doppler to Hz
+      const doppler = -doppler_ms/(1*(299792458/(dict[key]['fc']*1000000)));
+
+      // output data
+      dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
+      dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler, 5)
+
+      // limit max number of storage
+      if (dict[key]['proc'][hexCode]['delays'].length >= nMaxDelayArray) {
+        dict[key]['proc'][hexCode]['delays'].shift();
+        dict[key]['proc'][hexCode]['timestamps'].shift();
       }
-
-      // skip if no change to lat/lon/alt
-      if (dict[key]['out'][hexCode]['lat'] === aircraft['lat'] &&
-        dict[key]['out'][hexCode]['lon'] === aircraft['lon'] &&
-        dict[key]['out'][hexCode]['alt'] === aircraft['alt_geom']) {
-        continue;
-      }
-
-      dict[key]['out'][hexCode]['timestamp'] = json.now + aircraft.seen_pos;
-      dict[key]['out'][hexCode]['flight'] = (aircraft.flight);
-      dict[key]['proc'][hexCode]['lat'] = aircraft['lat'];
-      dict[key]['proc'][hexCode]['lon'] = aircraft['lon'];
-      dict[key]['proc'][hexCode]['alt'] = aircraft['alt_geom'];
-
-      // convert target to ECEF
-      const tar = lla2ecef(aircraft['lat'], aircraft['lon'], ft2m(aircraft['alt_geom']));
-
-      // bistatic delay (km)
-      const dRxTar = norm([dict[key]['ecefRx'].x-tar.x,
-        dict[key]['ecefRx'].y-tar.y,
-	dict[key]['ecefRx'].z-tar.z]);
-      const dTxTar = norm([dict[key]['ecefTx'].x-tar.x,
-        dict[key]['ecefTx'].y-tar.y,
-	dict[key]['ecefTx'].z-tar.z]);
-      const delay = dRxTar + dTxTar - dict[key]['dRxTx'];
-
-      // store bistatic delay/timestamps for Doppler
-      dict[key]['proc'][hexCode]['delays'].push(delay);
-      dict[key]['proc'][hexCode]['timestamps'].push(json.now + aircraft.seen_pos);
-
-      // bistatic Doppler (Hz)
-      if (dict[key]['proc'][hexCode]['delays'].length >= 2) {
-
-	// smoothed derivative using median method
-	const doppler_ms_arr = smoothedDerivativeUsingMedian(
-	  dict[key]['proc'][hexCode]['delays'], 
-	  dict[key]['proc'][hexCode]['timestamps'], nDopplerSmooth);
-	const doppler_ms = doppler_ms_arr.at(-1);
-
-	// standard derivative (noisy)
-	/*
-	const delta_t = dict[key]['proc'][hexCode]['timestamps'].at(-1)
-          - dict[key]['proc'][hexCode]['timestamps'].at(-2);
-	const diff = dict[key]['proc'][hexCode]['delays'].at(-1)
-	  - dict[key]['proc'][hexCode]['delays'].at(-2);
-        const doppler_ms = diff / delta_t;
-	*/
-
-	// convert Doppler to Hz
-        const doppler = -doppler_ms/(1*(299792458/(dict[key]['fc']*1000000)));
-
-	// output data
-	dict[key]['out'][hexCode]['delay'] = limit_digits(delay/1000, 5)
-        dict[key]['out'][hexCode]['doppler'] = limit_digits(doppler, 5)
-
-	// limit max number of storage
-        if (dict[key]['proc'][hexCode]['delays'].length >= nMaxDelayArray) {
-	  dict[key]['proc'][hexCode]['delays'].shift();
-	  dict[key]['proc'][hexCode]['timestamps'].shift();
-	}
-      }
-
     }
 
   }

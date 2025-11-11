@@ -1,3 +1,7 @@
+const KNOTS_TO_MS = 0.514444;
+const FTMIN_TO_MS = 0.00508;
+const SPEED_OF_LIGHT = 299792458;
+
 /// @brief Convert ENU velocity to ECEF velocity
 /// @param vel_e East component of velocity (m/s)
 /// @param vel_n North component of velocity (m/s)
@@ -33,7 +37,7 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
     return null;
   }
 
-  const gs_ms = aircraft.gs * 0.514444;
+  const gs_ms = aircraft.gs * KNOTS_TO_MS;
   const track_rad = aircraft.track * Math.PI / 180;
 
   const vel_east = gs_ms * Math.sin(track_rad);
@@ -41,7 +45,7 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
 
   let vel_up = 0;
   if (aircraft.geom_rate !== undefined && !isNaN(aircraft.geom_rate)) {
-    vel_up = aircraft.geom_rate * 0.00508;
+    vel_up = aircraft.geom_rate * FTMIN_TO_MS;
   }
 
   const lat_rad = aircraft.lat * Math.PI / 180;
@@ -69,7 +73,7 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
                           vel_ecef.z * vec_to_tx.z);
 
   const bistatic_range_rate = range_rate_rx + range_rate_tx;
-  const wavelength = 299792458 / (fc * 1000000);
+  const wavelength = SPEED_OF_LIGHT / (fc * 1000000);
   const doppler = -bistatic_range_rate / wavelength;
 
   return doppler;

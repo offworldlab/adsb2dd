@@ -31,7 +31,7 @@ export function lla2ecef(latitude, longitude, altitude) {
 }
 
 /// @brief Calculate the Euclidean norm (magnitude) of a 3D vector.
-/// @param vector Object with fields x, y, z in meters.
+/// @param vector Array of [x, y, z] components in meters.
 /// @return Norm (scalar quantity).
 export function norm(vector) {
   return Math.sqrt(vector.reduce((sum, value) => sum + value ** 2, 0));

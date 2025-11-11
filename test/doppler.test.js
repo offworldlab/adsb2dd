@@ -1,0 +1,106 @@
+import {lla2ecef} from '../src/node/geometry.js';
+import {enuToEcef, calculateDopplerFromVelocity} from '../src/node/doppler.js';
+
+function norm(vec) {
+  return Math.sqrt(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z);
+}
+
+describe('Velocity-Based Doppler', () => {
+  describe('ENU to ECEF transformation', () => {
+    test('eastward velocity at equator transforms to +Y in ECEF', () => {
+      const vel_e = 100;
+      const vel_n = 0;
+      const vel_u = 0;
+      const lat_rad = 0;
+      const lon_rad = 0;
+
+      const vel_ecef = enuToEcef(vel_e, vel_n, vel_u, lat_rad, lon_rad);
+
+      expect(vel_ecef.y).toBeCloseTo(100, 2);
+      expect(vel_ecef.x).toBeCloseTo(0, 2);
+      expect(vel_ecef.z).toBeCloseTo(0, 2);
+    });
+
+    test('northward velocity at equator transforms to +Z in ECEF', () => {
+      const vel_e = 0;
+      const vel_n = 100;
+      const vel_u = 0;
+      const lat_rad = 0;
+      const lon_rad = 0;
+
+      const vel_ecef = enuToEcef(vel_e, vel_n, vel_u, lat_rad, lon_rad);
+
+      expect(vel_ecef.z).toBeCloseTo(100, 2);
+      expect(vel_ecef.x).toBeCloseTo(0, 2);
+      expect(vel_ecef.y).toBeCloseTo(0, 2);
+    });
+  });
+
+  describe('Doppler calculation from velocity', () => {
+    test('aircraft moving toward receiver produces measurable Doppler', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0.05,
+        gs: 194.384,
+        track: 90,
+        geom_rate: 0
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(Math.abs(doppler)).toBeGreaterThan(10);
+    });
+
+    test('aircraft on perpendicular track produces near-zero Doppler', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 0,
+        geom_rate: 0
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(Math.abs(doppler)).toBeLessThan(10);
+    });
+
+    test('vertical velocity produces small Doppler', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 0,
+        track: 0,
+        geom_rate: 1968.5
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0.1, 0, 0);
+      const ecefTx = lla2ecef(-0.1, 0, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(Math.abs(doppler)).toBeLessThan(20);
+    });
+  });
+});

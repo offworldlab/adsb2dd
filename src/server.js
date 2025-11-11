@@ -39,7 +39,7 @@ app.get('/api/dd', async (req, res) => {
   const rxParams = req.query.rx.split(',').map(parseFloat);
   const txParams = req.query.tx.split(',').map(parseFloat);
   const fc = parseFloat(req.query.fc);
-  if (!server || !rxParams.every(isValidNumber) || !txParams.every(isValidNumber) || isNaN(fc)) {
+  if (!server || !rxParams.every(isValidNumber) || !txParams.every(isValidNumber) || isNaN(fc) || fc <= 0) {
     return res.status(400).json({ error: 'Invalid parameters.' });
   }
   const [rxLat, rxLon, rxAlt] = rxParams;

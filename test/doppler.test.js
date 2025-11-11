@@ -183,5 +183,91 @@ describe('Velocity-Based Doppler', () => {
 
       expect(doppler).toBeNull();
     });
+
+    test('handles track = 0 (north) correctly', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 0
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0.1, 0, 0);
+      const ecefTx = lla2ecef(-0.1, 0, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).not.toBeNull();
+    });
+
+    test('returns null for excessive ground speed', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 1500,
+        track: 90
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
+    });
+
+    test('returns null for excessive vertical rate', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 90,
+        geom_rate: 25000
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
+    });
+
+    test('returns null for invalid altitude', () => {
+      const aircraft = {
+        lat: 0,
+        lon: 0,
+        gs: 194.384,
+        track: 90,
+        alt_geom: 150000
+      };
+
+      const aircraft_ecef = lla2ecef(aircraft.lat, aircraft.lon, 10000);
+      const ecefRx = lla2ecef(0, 0.1, 0);
+      const ecefTx = lla2ecef(0, -0.1, 0);
+
+      const dRxTar = norm({x: ecefRx.x - aircraft_ecef.x, y: ecefRx.y - aircraft_ecef.y, z: ecefRx.z - aircraft_ecef.z});
+      const dTxTar = norm({x: ecefTx.x - aircraft_ecef.x, y: ecefTx.y - aircraft_ecef.y, z: ecefTx.z - aircraft_ecef.z});
+
+      const fc = 204.64;
+      const doppler = calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc);
+
+      expect(doppler).toBeNull();
+    });
   });
 });

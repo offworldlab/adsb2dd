@@ -1,6 +1,12 @@
 const KNOTS_TO_MS = 0.514444;
 const FTMIN_TO_MS = 0.00508;
 const SPEED_OF_LIGHT = 299792458;
+const MHZ_TO_HZ = 1e6;
+const MIN_VALID_DISTANCE = 100;
+const MAX_GROUND_SPEED = 1000;
+const MAX_VERTICAL_RATE = 20000;
+const MIN_ALTITUDE = -1000;
+const MAX_ALTITUDE = 100000;
 
 /// @brief Convert ENU velocity to ECEF velocity
 /// @param vel_e East component of velocity (m/s)
@@ -37,12 +43,26 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
     return null;
   }
 
-  if (dRxTar < 1 || dTxTar < 1) {
+  if (aircraft.gs < 0 || aircraft.gs > MAX_GROUND_SPEED) {
+    return null;
+  }
+
+  if (dRxTar < MIN_VALID_DISTANCE || dTxTar < MIN_VALID_DISTANCE) {
     return null;
   }
 
   if (aircraft.lat < -90 || aircraft.lat > 90 ||
       aircraft.lon < -180 || aircraft.lon > 180) {
+    return null;
+  }
+
+  if (aircraft.alt_geom !== undefined &&
+      (aircraft.alt_geom < MIN_ALTITUDE || aircraft.alt_geom > MAX_ALTITUDE)) {
+    return null;
+  }
+
+  if (aircraft.geom_rate !== undefined && !isNaN(aircraft.geom_rate) &&
+      Math.abs(aircraft.geom_rate) > MAX_VERTICAL_RATE) {
     return null;
   }
 
@@ -82,7 +102,7 @@ export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ec
                           vel_ecef.z * vec_to_tx.z);
 
   const bistatic_range_rate = range_rate_rx + range_rate_tx;
-  const wavelength = SPEED_OF_LIGHT / (fc * 1000000);
+  const wavelength = SPEED_OF_LIGHT / (fc * MHZ_TO_HZ);
   const doppler = -bistatic_range_rate / wavelength;
 
   return doppler;

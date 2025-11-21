@@ -34,15 +34,13 @@ export async function checkAdsbLol(lat, lon, radius) {
     return false;
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
   try {
     const apiUrl = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${radius}`;
 
-    // add timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
     const response = await fetch(apiUrl, { signal: controller.signal });
-    clearTimeout(timeout);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch data. Status: ${response.status}`);
@@ -52,12 +50,14 @@ export async function checkAdsbLol(lat, lon, radius) {
     if (data && typeof data.now === 'number' && !isNaN(data.now)) {
       return true;
     } else {
-      console.log('Invalid or missing timestamp in the "now" key.');
+      console.error('Invalid or missing timestamp in the "now" key.');
       return false;
     }
   } catch (error) {
     console.error('Error:', error.message);
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -71,15 +71,13 @@ export async function getAdsbLol(lat, lon, radius) {
     return { now: Date.now() / 1000, messages: 0, aircraft: [] };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
   try {
     const apiUrl = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${radius}`;
 
-    // add timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
     const response = await fetch(apiUrl, { signal: controller.signal });
-    clearTimeout(timeout);
 
     if (!response.ok) {
       throw new Error(`Failed to fetch data. Status: ${response.status}`);
@@ -89,22 +87,15 @@ export async function getAdsbLol(lat, lon, radius) {
 
     // adsb.lol API returns timestamp in milliseconds
     // convert to seconds to match tar1090 format
-    // validate timestamp is within reasonable range (±1 year from current time)
+    // use simple heuristic: if > 1e12, treat as milliseconds
     const timestamp = data.now;
-    const currentTime = Date.now() / 1000;
-    const oneYearSeconds = 365 * 24 * 60 * 60;
+    const nowInSeconds = timestamp > 1e12 ? timestamp / 1000 : timestamp;
 
-    let nowInSeconds;
-    if (timestamp > 1e12) {
-      // appears to be milliseconds, convert to seconds
-      nowInSeconds = timestamp / 1000;
-    } else if (timestamp >= currentTime - oneYearSeconds && timestamp <= currentTime + oneYearSeconds) {
-      // appears to be seconds and within reasonable range
-      nowInSeconds = timestamp;
-    } else {
-      // invalid timestamp, use current time
-      console.error('Invalid timestamp:', timestamp);
-      nowInSeconds = currentTime;
+    // validate result is within reasonable range (±1 year)
+    const currentTime = Date.now() / 1000;
+    const oneYear = 365 * 24 * 60 * 60;
+    if (nowInSeconds < currentTime - oneYear || nowInSeconds > currentTime + oneYear) {
+      console.error('Timestamp out of range:', timestamp);
     }
 
     return {
@@ -119,5 +110,7 @@ export async function getAdsbLol(lat, lon, radius) {
       messages: 0,
       aircraft: []
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }

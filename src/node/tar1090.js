@@ -5,7 +5,13 @@ import fetch from 'node-fetch';
 /// @return True if tar1090 server is valid.
 export async function checkTar1090(apiUrl) {
   try {
-    const response = await fetch(apiUrl);
+    // add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
     if (!response.ok) {
       throw new Error(`Failed to fetch data. Status: ${response.status}`);
     }
@@ -28,7 +34,13 @@ export async function checkTar1090(apiUrl) {
 /// @return JSON response.
 export async function getTar1090(apiUrl) {
   try {
-    const response = await fetch(apiUrl);
+    // add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(apiUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+
     if (!response.ok) {
       throw new Error(`Failed to fetch data. Status: ${response.status}`);
     }

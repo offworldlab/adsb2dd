@@ -73,8 +73,12 @@
       return;
     }
 
-    var url = window.location.href + `api/dd?rx=${rx}&tx=${tx}&fc=${fc}&server=${server}`;
-    url = url.replace(/\s/g, '');
+    const encodedRx = encodeURIComponent(rx.replace(/\s/g, ''));
+    const encodedTx = encodeURIComponent(tx.replace(/\s/g, ''));
+    const encodedFc = encodeURIComponent(fc);
+    const encodedServer = encodeURIComponent(server);
+
+    var url = window.location.href + `api/dd?rx=${encodedRx}&tx=${encodedTx}&fc=${encodedFc}&server=${encodedServer}`;
 
     if (url) {
       window.open(url, '_blank'); // Open in a new tab or window

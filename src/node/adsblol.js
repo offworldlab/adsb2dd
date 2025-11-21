@@ -6,6 +6,20 @@ import fetch from 'node-fetch';
 /// @param radius Radius in nautical miles (max 250).
 /// @return True if adsb.lol API is valid.
 export async function checkAdsbLol(lat, lon, radius) {
+  // validate input parameters
+  if (typeof lat !== 'number' || lat < -90 || lat > 90) {
+    console.error('Invalid latitude:', lat);
+    return false;
+  }
+  if (typeof lon !== 'number' || lon < -180 || lon > 180) {
+    console.error('Invalid longitude:', lon);
+    return false;
+  }
+  if (typeof radius !== 'number' || radius <= 0 || radius > 250) {
+    console.error('Invalid radius:', radius);
+    return false;
+  }
+
   try {
     const apiUrl = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${radius}`;
     const response = await fetch(apiUrl);
@@ -33,6 +47,20 @@ export async function checkAdsbLol(lat, lon, radius) {
 /// @param radius Radius in nautical miles (max 250).
 /// @return Normalized JSON response matching tar1090 format.
 export async function getAdsbLol(lat, lon, radius) {
+  // validate input parameters
+  if (typeof lat !== 'number' || lat < -90 || lat > 90) {
+    console.error('Invalid latitude:', lat);
+    return { now: Date.now() / 1000, messages: 0, aircraft: [] };
+  }
+  if (typeof lon !== 'number' || lon < -180 || lon > 180) {
+    console.error('Invalid longitude:', lon);
+    return { now: Date.now() / 1000, messages: 0, aircraft: [] };
+  }
+  if (typeof radius !== 'number' || radius <= 0 || radius > 250) {
+    console.error('Invalid radius:', radius);
+    return { now: Date.now() / 1000, messages: 0, aircraft: [] };
+  }
+
   try {
     const apiUrl = `https://api.adsb.lol/v2/lat/${lat}/lon/${lon}/dist/${radius}`;
     const response = await fetch(apiUrl);

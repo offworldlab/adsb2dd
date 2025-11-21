@@ -4,8 +4,12 @@ import fetch from 'node-fetch';
 /// @param apiUrl Full path to aircraft.json.
 /// @return True if tar1090 server is valid.
 export async function checkTar1090(apiUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
   try {
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, { signal: controller.signal });
+
     if (!response.ok) {
       throw new Error(`Failed to fetch data. Status: ${response.status}`);
     }
@@ -14,12 +18,14 @@ export async function checkTar1090(apiUrl) {
     if (data && typeof data.now === 'number' && !isNaN(data.now)) {
       return true;
     } else {
-      console.log('Invalid or missing timestamp in the "now" key.');
+      console.error('Invalid or missing timestamp in the "now" key.');
       return false;
     }
   } catch (error) {
     console.error('Error:', error.message);
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -27,8 +33,12 @@ export async function checkTar1090(apiUrl) {
 /// @param apiUrl Full path to aircraft.json.
 /// @return JSON response.
 export async function getTar1090(apiUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
   try {
-    const response = await fetch(apiUrl);
+    const response = await fetch(apiUrl, { signal: controller.signal });
+
     if (!response.ok) {
       throw new Error(`Failed to fetch data. Status: ${response.status}`);
     }
@@ -37,7 +47,13 @@ export async function getTar1090(apiUrl) {
     return data;
   } catch (error) {
     console.error('Error:', error.message);
-    return false;
+    return {
+      now: Date.now() / 1000,
+      messages: 0,
+      aircraft: []
+    };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

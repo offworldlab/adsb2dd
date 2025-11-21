@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 
 import {checkTar1090, getTar1090} from './node/tar1090.js';
+import {checkAdsbLol, getAdsbLol} from './node/adsblol.js';
 import {lla2ecef, norm, ft2m} from './node/geometry.js';
 import {isValidNumber} from './node/validate.js';
 import {calculateDopplerFromVelocity, calculateWavelength} from './node/doppler.js';
@@ -18,6 +19,7 @@ const tDelete = 30;
 const tDeletePlane = 5;
 const nMaxDelayArray = 10;
 const nDopplerSmooth = 10;
+const adsbLolRadius = 40; // nautical miles, as specified in issue #4
 
 app.use(express.static('public'));
 
@@ -43,10 +45,62 @@ app.get('/api/dd', async (req, res) => {
   }
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
-  const apiUrl = server + '/data/aircraft.json';
 
-  // add new entry to dict
-  const isServerValid = await checkTar1090(apiUrl);
+  let isAdsbLol = false;
+  try {
+    const serverUrl = new URL(server);
+    isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid server URL format' });
+  }
+
+  // validate server URL to prevent SSRF attacks
+  if (!isAdsbLol) {
+    try {
+      const serverUrl = new URL(server);
+      // block private IP ranges and localhost
+      const hostname = serverUrl.hostname;
+      const privateRanges = [
+        /^127\./,
+        /^10\./,
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+        /^192\.168\./,
+        /^169\.254\./,
+        /^0\.0\.0\.0$/,
+        /^::1$/,
+        /^::ffff:127\./,
+        /^fe80:/,
+        /^fc00:/,
+        /^fd00:/,
+        /localhost/i
+      ];
+      if (privateRanges.some(range => range.test(hostname))) {
+        return res.status(400).json({ error: 'Server URL points to private network' });
+      }
+      // block dotless decimal notation (e.g., 2130706433 = 127.0.0.1)
+      if (/^\d+$/.test(hostname)) {
+        return res.status(400).json({ error: 'Server URL uses invalid IP format' });
+      }
+      // only allow http and https
+      if (!['http:', 'https:'].includes(serverUrl.protocol)) {
+        return res.status(400).json({ error: 'Server URL must use http or https protocol' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid server URL format' });
+    }
+  }
+  let isServerValid;
+  let midLat, midLon;
+
+  if (isAdsbLol) {
+    midLat = (rxLat + txLat) / 2;
+    midLon = (rxLon + txLon) / 2;
+    isServerValid = await checkAdsbLol(midLat, midLon, adsbLolRadius);
+  } else {
+    const apiUrl = new URL('/data/aircraft.json', server).href;
+    isServerValid = await checkTar1090(apiUrl);
+  }
+
   if (isServerValid) {
     dict[req.originalUrl] = {};
     dict[req.originalUrl]['rxLat'] = rxLat;
@@ -57,7 +111,13 @@ app.get('/api/dd', async (req, res) => {
     dict[req.originalUrl]['txAlt'] = txAlt;
     dict[req.originalUrl]['fc'] = fc;
     dict[req.originalUrl]['server'] = server;
-    dict[req.originalUrl]['apiUrl'] = apiUrl;
+    dict[req.originalUrl]['isAdsbLol'] = isAdsbLol;
+    if (isAdsbLol) {
+      dict[req.originalUrl]['midLat'] = midLat;
+      dict[req.originalUrl]['midLon'] = midLon;
+    } else {
+      dict[req.originalUrl]['apiUrl'] = new URL('/data/aircraft.json', server).href;
+    }
     dict[req.originalUrl]['out'] = {};
     dict[req.originalUrl]['timestamp'] = Date.now()/1000;
     dict[req.originalUrl]['proc'] = {};
@@ -65,11 +125,11 @@ app.get('/api/dd', async (req, res) => {
     const ecefTx = lla2ecef(txLat, txLon, txAlt);
     dict[req.originalUrl]['ecefRx'] = ecefRx;
     dict[req.originalUrl]['ecefTx'] = ecefTx;
-    dict[req.originalUrl]['dRxTx'] = norm([ecefRx.x - ecefTx.x, 
+    dict[req.originalUrl]['dRxTx'] = norm([ecefRx.x - ecefTx.x,
       ecefRx.y - ecefTx.y, ecefRx.z - ecefTx.z]);
     return res.json(dict[req.originalUrl]['out']);
   } else {
-    return res.status(500).json({ error: 'Error checking tar1090 validity.' });
+    return res.status(500).json({ error: 'Error checking data source validity.' });
   }
 
 });
@@ -91,7 +151,12 @@ const process_adsb2dd = async () => {
   for (const [key, value] of Object.entries(dict)) {
 
     // get latest JSON from server
-    var json = await getTar1090(dict[key]['apiUrl']);
+    let json;
+    if (dict[key]['isAdsbLol']) {
+      json = await getAdsbLol(dict[key]['midLat'], dict[key]['midLon'], adsbLolRadius);
+    } else {
+      json = await getTar1090(dict[key]['apiUrl']);
+    }
 
     // skip if fetch failed or invalid response
     if (!json || !json.aircraft || !Array.isArray(json.aircraft)) {
@@ -99,6 +164,7 @@ const process_adsb2dd = async () => {
     }
 
     // check that ADS-B data has updated
+    // both json.now and dict timestamp are in seconds (not milliseconds)
     if (json.now === dict[key]['timestamp']) {
       continue;
     }

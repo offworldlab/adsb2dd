@@ -20,6 +20,11 @@
     }
   }
 
+  // initialize UI state on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    toggleDataSource();
+  });
+
   function isNumeric(value) {
     return !isNaN(parseFloat(value)) && isFinite(value);
   }

@@ -47,6 +47,36 @@ app.get('/api/dd', async (req, res) => {
   const [txLat, txLon, txAlt] = txParams;
 
   const isAdsbLol = server === 'https://api.adsb.lol';
+
+  // validate server URL to prevent SSRF attacks
+  if (!isAdsbLol) {
+    try {
+      const serverUrl = new URL(server);
+      // block private IP ranges and localhost
+      const hostname = serverUrl.hostname;
+      const privateRanges = [
+        /^127\./,
+        /^10\./,
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+        /^192\.168\./,
+        /^169\.254\./,
+        /^::1$/,
+        /^fe80:/,
+        /^fc00:/,
+        /^fd00:/,
+        /localhost/i
+      ];
+      if (privateRanges.some(range => range.test(hostname))) {
+        return res.status(400).json({ error: 'Server URL points to private network' });
+      }
+      // only allow http and https
+      if (!['http:', 'https:'].includes(serverUrl.protocol)) {
+        return res.status(400).json({ error: 'Server URL must use http or https protocol' });
+      }
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid server URL format' });
+    }
+  }
   let isServerValid;
   let midLat, midLon;
 

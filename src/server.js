@@ -46,7 +46,13 @@ app.get('/api/dd', async (req, res) => {
   const [rxLat, rxLon, rxAlt] = rxParams;
   const [txLat, txLon, txAlt] = txParams;
 
-  const isAdsbLol = server.includes('api.adsb.lol');
+  let isAdsbLol = false;
+  try {
+    const serverUrl = new URL(server);
+    isAdsbLol = serverUrl.hostname === 'api.adsb.lol';
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid server URL format' });
+  }
 
   // validate server URL to prevent SSRF attacks
   if (!isAdsbLol) {

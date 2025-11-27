@@ -9,10 +9,10 @@ export const MIN_ALTITUDE_FT = -1000;
 export const MAX_ALTITUDE_FT = 100000;
 
 /// @brief Calculate wavelength from frequency
-/// @param fc Carrier frequency in MHz
+/// @param fc Carrier frequency in Hz
 /// @return Wavelength in meters
 export function calculateWavelength(fc) {
-  return SPEED_OF_LIGHT / (fc * MHZ_TO_HZ);
+  return SPEED_OF_LIGHT / fc;
 }
 
 /// @brief Convert ENU velocity to ECEF velocity
@@ -42,7 +42,7 @@ export function enuToEcef(vel_e, vel_n, vel_u, lat_rad, lon_rad) {
 /// @param ecefTx Transmitter position in ECEF
 /// @param dRxTar Distance from receiver to aircraft (meters)
 /// @param dTxTar Distance from transmitter to aircraft (meters)
-/// @param fc Carrier frequency in MHz
+/// @param fc Carrier frequency in Hz
 /// @return Doppler shift in Hz, or null if velocity data unavailable
 export function calculateDopplerFromVelocity(aircraft, aircraft_ecef, ecefRx, ecefTx, dRxTar, dTxTar, fc) {
   if (aircraft.gs === undefined || aircraft.track === undefined ||
